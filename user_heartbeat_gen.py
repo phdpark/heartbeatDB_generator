@@ -203,14 +203,7 @@ def generate_heart_rate_data(user_data, duration_days=7, interval_seconds=30, ou
         # 전체 데이터에 추가
         all_data.extend(heart_rates)
         
-        # 사용자별 파일 저장
-        if output_format == 'csv':
-            user_file = os.path.join(output_dir, f'heart_rate_user_{user_id}.csv')
-            pd.DataFrame(heart_rates).to_csv(user_file, index=False)
-        else:  # JSON
-            user_file = os.path.join(output_dir, f'heart_rate_user_{user_id}.json')
-            with open(user_file, 'w', encoding='utf-8') as f:
-                json.dump(heart_rates, f, ensure_ascii=False, indent=2)
+        # 사용자별 파일 저장 코드 제거 (여기서 삭제됨)
     
     # 전체 데이터 파일 저장
     if output_format == 'csv':
@@ -360,7 +353,7 @@ def generate_realtime_data(user_data, interval_seconds=30, output_format='csv', 
                 
                 all_records.append(record)
             
-            # 데이터 저장
+            # 데이터 저장 - 실시간 모드에서는 타임스탬프별로 하나의 파일 생성
             if output_format == 'csv':
                 file_name = os.path.join(output_dir, f'heart_rate_{current_time.strftime("%Y%m%d_%H%M%S")}.csv')
                 pd.DataFrame(all_records).to_csv(file_name, index=False)
