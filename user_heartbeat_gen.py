@@ -407,7 +407,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='사용자별 심박수 데이터 생성기')
     parser.add_argument('--input', type=str, required=True, help='입력 사용자 데이터 파일 경로 (CSV 또는 JSON)')
     parser.add_argument('--interval', type=int, default=30, help='데이터 기록 간격 (초)')
-    parser.add_argument('--days', type=int, default=7, help='생성할 과거 데이터 기간 (일)')
+    parser.add_argument('--days', type=int, default=1, help='생성할 과거 데이터 기간 (일)')
     parser.add_argument('--realtime', action='store_true', help='실시간 데이터 생성 모드')
     parser.add_argument('--risk', type=float, default=0.15, help='위험 상황을 포함할 70세 이상 사용자의 비율 (0-1)')
     parser.add_argument('--output', type=str, default='heart_rate_data', help='출력 디렉토리 경로')
