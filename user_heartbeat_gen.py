@@ -164,71 +164,98 @@ def generate_heart_rates(user_id, age, duration_days=7, interval_seconds=30, is_
 def generate_heart_rate_data(user_data, duration_days=7, interval_seconds=30, output_dir='heart_rate_data', risk_percentage=0.15):
     """
     모든 사용자의 심박수 데이터를 생성하고 저장합니다.
-    CSV와 JSON 파일 모두에 결과를 기록합니다.
+    메모리 효율적: 데이터를 메모리에 누적하지 않고 바로 파일에 기록합니다.
     risk_percentage: 70세 이상 사용자 중 위험 상황을 포함할 비율
     """
     # 출력 디렉토리 생성
     os.makedirs(output_dir, exist_ok=True)
-    
-    # 전체 데이터를 위한 리스트
-    all_data = []
+
+    # 위험 사용자 목록 생성
     risk_users = []
-    
+
     # 70세 이상 사용자 목록
     elderly_users = user_data[user_data['age'] >= 70]
-    
+
     # 위험 상황이 발생할 노인 사용자 선택
     if len(elderly_users) > 0:
         risk_count = max(1, int(len(elderly_users) * risk_percentage))
         risk_indices = np.random.choice(elderly_users.index, size=risk_count, replace=False)
         risk_users = elderly_users.loc[risk_indices, 'user_id'].tolist()
         print(f"선택된 위험 사용자: {len(risk_users)}명 (70세 이상 사용자 중)")
-    
+
+    # 출력 파일 준비
+    all_file_csv = os.path.join(output_dir, 'heart_rate_all_users.csv')
+    all_file_json = os.path.join(output_dir, 'heart_rate_all_users.json')
+
+    # CSV 파일 헤더 작성
+    with open(all_file_csv, 'w', encoding='utf-8') as f:
+        f.write("user_id,timestamp,heartbeat_max,heartbeat_min,heartbeat_avg,is_risk\n")
+
+    # JSON 파일 초기화 (빈 배열로 시작)
+    with open(all_file_json, 'w', encoding='utf-8') as f:
+        f.write("[\n")  # JSON 배열 시작
+
+    # 위험 이벤트 카운터 및 요약 정보
+    risk_event_count = 0
+    risk_events_summary = []
+    first_json_record = True  # 첫 번째 JSON 레코드인지 확인 (쉼표 처리용)
+
     # 각 사용자에 대한 심박수 데이터 생성
     for idx, user in user_data.iterrows():
         user_id = user['user_id']
         age = user['age']
-        
+
         # 위험 상황 포함 여부 결정
         is_high_risk = user_id in risk_users
-        
+
         print(f"사용자 {user_id} ({idx+1}/{len(user_data)}) - 나이: {age}세 - {'위험 상황 포함' if is_high_risk else '정상'}")
-        
+
         # 심박수 데이터 생성
         heart_rates = generate_heart_rates(user_id, age, duration_days, interval_seconds, is_high_risk)
-        
-        # 사용자 ID 추가
-        for entry in heart_rates:
-            entry['user_id'] = user_id
-        
-        # 전체 데이터에 추가
-        all_data.extend(heart_rates)
-    
-    # 전체 데이터 파일 저장 (CSV와 JSON 모두)
-    all_file_csv = os.path.join(output_dir, 'heart_rate_all_users.csv')
-    all_file_json = os.path.join(output_dir, 'heart_rate_all_users.json')
-    
-    # CSV 파일로 저장
-    pd.DataFrame(all_data).to_csv(all_file_csv, index=False)
-    print(f"데이터가 CSV 파일에 저장되었습니다: {all_file_csv}")
-    
-    # JSON 파일로 저장
-    with open(all_file_json, 'w', encoding='utf-8') as f:
-        json.dump(all_data, f, ensure_ascii=False, indent=2)
-    print(f"데이터가 JSON 파일에 저장되었습니다: {all_file_json}")
-    
-    # 위험 이벤트 요약 로그 출력 (파일 생성하지 않음)
-    risk_events = [entry for entry in all_data if entry['is_risk'] == 1]
-    if risk_events:
-        print(f"위험 이벤트 수: {len(risk_events)}건 (위험 사용자: {len(risk_users)}명)")
+
+        # 생성된 데이터를 바로 파일에 쓰기
+        with open(all_file_csv, 'a', encoding='utf-8') as f_csv, open(all_file_json, 'a', encoding='utf-8') as f_json:
+            for entry in heart_rates:
+                # 사용자 ID 추가
+                entry['user_id'] = user_id
+
+                # CSV에 기록
+                f_csv.write(f"{entry['user_id']},{entry['timestamp']},{entry['heartbeat_max']},{entry['heartbeat_min']},{entry['heartbeat_avg']},{entry['is_risk']}\n")
+
+                # JSON에 기록 (쉼표 처리)
+                if not first_json_record:
+                    f_json.write(",\n")
+                else:
+                    first_json_record = False
+
+                json_line = json.dumps(entry, ensure_ascii=False)
+                f_json.write(json_line)
+
+                # 위험 이벤트 요약 정보 수집
+                if entry['is_risk'] == 1:
+                    risk_event_count += 1
+                    # 최대 10개까지만 요약 정보 저장
+                    if len(risk_events_summary) < 10:
+                        risk_events_summary.append({
+                            'user_id': entry['user_id'],
+                            'timestamp': entry['timestamp'],
+                            'heartbeat_avg': entry['heartbeat_avg']
+                        })
+
+    # JSON 파일 마무리 (배열 닫기)
+    with open(all_file_json, 'a', encoding='utf-8') as f:
+        f.write("\n]")
+
+    # 위험 이벤트 요약 로그 출력
+    if risk_event_count > 0:
+        print(f"위험 이벤트 수: {risk_event_count}건 (위험 사용자: {len(risk_users)}명)")
         print("각 위험 이벤트 요약:")
-        for event in risk_events[:10]:  # 처음 10개만 출력
+        for event in risk_events_summary:
             print(f"  사용자 {event['user_id']} - {event['timestamp']} - 심박수: {event['heartbeat_avg']} bpm")
-        if len(risk_events) > 10:
-            print(f"  ... 외 {len(risk_events)-10}건")
-    
+        if risk_event_count > 10:
+            print(f"  ... 외 {risk_event_count-10}건")
+
     print(f"완료! 모든 사용자의 심박수 데이터가 {output_dir} 디렉토리에 저장되었습니다.")
-    return all_data
 
 def generate_realtime_data(user_data, interval_seconds=30, output_dir='realtime_heart_data', risk_percentage=0.15):
     """
