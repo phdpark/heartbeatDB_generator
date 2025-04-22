@@ -161,14 +161,51 @@ def generate_heart_rates(user_id, age, duration_days=7, interval_seconds=30, is_
     
     return heart_rates
 
-def generate_heart_rate_data(user_data, duration_days=7, interval_seconds=30, output_dir='heart_rate_data', risk_percentage=0.15):
+def generate_heart_rate_data(user_data, duration_days=7, interval_seconds=30, output_dir='heart_rate_data',
+                            risk_percentage=0.15, output_format=None):
     """
     모든 사용자의 심박수 데이터를 생성하고 저장합니다.
     메모리 효율적: 데이터를 메모리에 누적하지 않고 바로 파일에 기록합니다.
-    risk_percentage: 70세 이상 사용자 중 위험 상황을 포함할 비율
+
+    Parameters:
+    -----------
+    user_data : DataFrame
+        사용자 정보가 포함된 DataFrame
+    duration_days : int
+        생성할 과거 데이터 기간 (일)
+    interval_seconds : int
+        데이터 기록 간격 (초)
+    output_dir : str
+        출력 디렉토리 경로
+    risk_percentage : float
+        70세 이상 사용자 중 위험 상황을 포함할 비율 (0-1)
+    output_format : str or list, optional
+        출력 파일 형식 ('csv', 'json', 또는 ['csv', 'json'])
+        None인 경우 모든 형식으로 저장
     """
     # 출력 디렉토리 생성
     os.makedirs(output_dir, exist_ok=True)
+
+    # 출력 형식 설정
+    if output_format is None:
+        output_format = ['csv', 'json']  # 기본값: 모든 형식 저장
+    elif isinstance(output_format, str):
+        output_format = [output_format.lower()]  # 단일 문자열을 리스트로 변환
+    else:
+        output_format = [fmt.lower() for fmt in output_format]  # 모든 형식을 소문자로
+
+    # 지원되지 않는 형식 확인
+    valid_formats = ['csv', 'json']
+    for fmt in output_format:
+        if fmt not in valid_formats:
+            print(f"경고: '{fmt}'은(는) 지원되지 않는 형식입니다. 유효한 형식은 {valid_formats}입니다.")
+            output_format.remove(fmt)
+
+    if not output_format:
+        print("오류: 유효한 출력 형식이 지정되지 않았습니다. 기본값(csv, json)을 사용합니다.")
+        output_format = ['csv', 'json']
+
+    print(f"선택된 출력 형식: {', '.join(output_format)}")
 
     # 위험 사용자 목록 생성
     risk_users = []
@@ -184,52 +221,60 @@ def generate_heart_rate_data(user_data, duration_days=7, interval_seconds=30, ou
         print(f"선택된 위험 사용자: {len(risk_users)}명 (70세 이상 사용자 중)")
 
     # 출력 파일 준비
-    all_file_csv = os.path.join(output_dir, 'heart_rate_all_users.csv')
-    all_file_json = os.path.join(output_dir, 'heart_rate_all_users.json')
+    file_handles = {}
 
-    # CSV 파일 헤더 작성
-    with open(all_file_csv, 'w', encoding='utf-8') as f:
-        f.write("user_id,timestamp,heartbeat_max,heartbeat_min,heartbeat_avg,is_risk\n")
+    # CSV 파일 준비
+    if 'csv' in output_format:
+        all_file_csv = os.path.join(output_dir, 'heart_rate_all_users.csv')
+        csv_file = open(all_file_csv, 'w', encoding='utf-8')
+        csv_file.write("user_id,timestamp,heartbeat_max,heartbeat_min,heartbeat_avg,is_risk\n")
+        file_handles['csv'] = csv_file
+        print(f"CSV 파일이 생성되었습니다: {all_file_csv}")
 
-    # JSON 파일 초기화 (빈 배열로 시작)
-    with open(all_file_json, 'w', encoding='utf-8') as f:
-        f.write("[\n")  # JSON 배열 시작
+    # JSON 파일 준비
+    if 'json' in output_format:
+        all_file_json = os.path.join(output_dir, 'heart_rate_all_users.json')
+        json_file = open(all_file_json, 'w', encoding='utf-8')
+        json_file.write("[\n")  # JSON 배열 시작
+        file_handles['json'] = json_file
+        print(f"JSON 파일이 생성되었습니다: {all_file_json}")
 
     # 위험 이벤트 카운터 및 요약 정보
     risk_event_count = 0
     risk_events_summary = []
     first_json_record = True  # 첫 번째 JSON 레코드인지 확인 (쉼표 처리용)
 
-    # 각 사용자에 대한 심박수 데이터 생성
-    for idx, user in user_data.iterrows():
-        user_id = user['user_id']
-        age = user['age']
+    try:
+        # 각 사용자에 대한 심박수 데이터 생성
+        for idx, user in user_data.iterrows():
+            user_id = user['user_id']
+            age = user['age']
 
-        # 위험 상황 포함 여부 결정
-        is_high_risk = user_id in risk_users
+            # 위험 상황 포함 여부 결정
+            is_high_risk = user_id in risk_users
 
-        print(f"사용자 {user_id} ({idx+1}/{len(user_data)}) - 나이: {age}세 - {'위험 상황 포함' if is_high_risk else '정상'}")
+            print(f"사용자 {user_id} ({idx+1}/{len(user_data)}) - 나이: {age}세 - {'위험 상황 포함' if is_high_risk else '정상'}")
 
-        # 심박수 데이터 생성
-        heart_rates = generate_heart_rates(user_id, age, duration_days, interval_seconds, is_high_risk)
+            # 심박수 데이터 생성
+            heart_rates = generate_heart_rates(user_id, age, duration_days, interval_seconds, is_high_risk)
 
-        # 생성된 데이터를 바로 파일에 쓰기
-        with open(all_file_csv, 'a', encoding='utf-8') as f_csv, open(all_file_json, 'a', encoding='utf-8') as f_json:
+            # 생성된 데이터를 바로 파일에 쓰기
             for entry in heart_rates:
-                # 사용자 ID 추가
-                entry['user_id'] = user_id
+                entry['user_id'] = user_id  # 사용자 ID 추가
 
                 # CSV에 기록
-                f_csv.write(f"{entry['user_id']},{entry['timestamp']},{entry['heartbeat_max']},{entry['heartbeat_min']},{entry['heartbeat_avg']},{entry['is_risk']}\n")
+                if 'csv' in file_handles:
+                    file_handles['csv'].write(f"{entry['user_id']},{entry['timestamp']},{entry['heartbeat_max']},{entry['heartbeat_min']},{entry['heartbeat_avg']},{entry['is_risk']}\n")
 
-                # JSON에 기록 (쉼표 처리)
-                if not first_json_record:
-                    f_json.write(",\n")
-                else:
-                    first_json_record = False
+                # JSON에 기록
+                if 'json' in file_handles:
+                    if not first_json_record:
+                        file_handles['json'].write(",\n")
+                    else:
+                        first_json_record = False
 
-                json_line = json.dumps(entry, ensure_ascii=False)
-                f_json.write(json_line)
+                    json_line = json.dumps(entry, ensure_ascii=False)
+                    file_handles['json'].write(json_line)
 
                 # 위험 이벤트 요약 정보 수집
                 if entry['is_risk'] == 1:
@@ -242,9 +287,12 @@ def generate_heart_rate_data(user_data, duration_days=7, interval_seconds=30, ou
                             'heartbeat_avg': entry['heartbeat_avg']
                         })
 
-    # JSON 파일 마무리 (배열 닫기)
-    with open(all_file_json, 'a', encoding='utf-8') as f:
-        f.write("\n]")
+    finally:
+        # 열린 파일 정리
+        for fmt, file_handle in file_handles.items():
+            if fmt == 'json':
+                file_handle.write("\n]")  # JSON 배열 닫기
+            file_handle.close()
 
     # 위험 이벤트 요약 로그 출력
     if risk_event_count > 0:
@@ -438,24 +486,33 @@ if __name__ == "__main__":
     parser.add_argument('--realtime', action='store_true', help='실시간 데이터 생성 모드')
     parser.add_argument('--risk', type=float, default=0.15, help='위험 상황을 포함할 70세 이상 사용자의 비율 (0-1)')
     parser.add_argument('--output', type=str, default='heart_rate_data', help='출력 디렉토리 경로')
-    
+    parser.add_argument('--format', type=str, choices=['csv', 'json', 'both'], default='both',
+                        help='출력 파일 형식: csv, json, both (기본값: both)')
+
     args = parser.parse_args()
-    
+
     # 사용자 데이터 로드
     print(f"{args.input} 파일을 로드하는 중...")
     user_data = load_user_data(args.input)
     print(f"{len(user_data)}명의 사용자 데이터를 로드했습니다.")
-    
+
     # 70세 이상 사용자 수 확인
     elderly_count = len(user_data[user_data['age'] >= 70])
     print(f"70세 이상 사용자: {elderly_count}명 (전체의 {elderly_count/len(user_data)*100:.1f}%)")
-    
+
+    # 출력 형식 설정
+    if args.format == 'both':
+        output_format = ['csv', 'json']
+    else:
+        output_format = [args.format]
+
     if args.realtime:
         # 실시간 데이터 생성 (하나의 파일에 지속적으로 기록)
+        # 참고: realtime 모드에서는 아직 output_format 옵션이 구현되지 않았습니다.
         generate_realtime_data(user_data, args.interval, args.output, risk_percentage=args.risk)
     else:
         # 과거 데이터 생성
-        generate_heart_rate_data(user_data, args.days, args.interval, args.output, risk_percentage=args.risk)
+        generate_heart_rate_data(user_data, args.days, args.interval, args.output, risk_percentage=args.risk, output_format=output_format)
 
 # 스크립트 실행 예제:
 #
@@ -465,8 +522,14 @@ if __name__ == "__main__":
 # 2. 위험 상황을 30%의 70세 이상 사용자에게 포함:
 # python heart_rate_generator.py --input korean_test_data_1000.csv --risk 0.3
 #
-# 3. 실시간 데이터 생성 (10초 간격):
+# 3. CSV 형식으로만 출력:
+# python heart_rate_generator.py --input korean_test_data_1000.csv --format csv
+#
+# 4. JSON 형식으로만 출력:
+# python heart_rate_generator.py --input korean_test_data_1000.csv --format json
+#
+# 5. 실시간 데이터 생성 (10초 간격):
 # python heart_rate_generator.py --input korean_test_data_1000.csv --realtime --interval 10 --risk 0.2
 #
-# 4. 출력 디렉토리 지정:
+# 6. 출력 디렉토리 지정:
 # python heart_rate_generator.py --input korean_test_data_1000.csv --output custom_output_dir
