@@ -6,7 +6,10 @@ import datetime
 import argparse
 import os
 import random
+import requests
 from datetime import datetime, timedelta
+
+API_ENDPOINT = "https://08din32tl2.execute-api.us-east-1.amazonaws.com"
 
 def load_user_data(file_path):
     """사용자 데이터 파일(CSV 또는 JSON)을 로드합니다."""
@@ -152,36 +155,63 @@ def generate_heart_rates(user_id, age, duration_days=7, interval_seconds=30, is_
         
         # 결과 저장
         heart_rates.append({
-            'timestamp': timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            'timestamp': timestamp.strftime('%Y-%m-%dT%H:%M:%S'),  # ISO 형식으로 수정
             'heartbeat_max': heart_rate_max,
             'heartbeat_min': heart_rate_min,
             'heartbeat_avg': heart_rate,
-            'is_risk': 1 if is_risk_period else 0  # 위험 상태 플래그 추가
+            'is_risk': is_risk_period  # Boolean으로 변경
         })
     
     return heart_rates
 
+#def send_data_to_api(data):
+#    """데이터를 API로 전송합니다."""
+#    try:
+#        headers = {'Content-Type': 'application/json'}
+#        response = requests.post(API_ENDPOINT, json=data, headers=headers)
+#        
+#        if response.status_code == 200:
+#            return True, response.json() if response.text else {"message": "Success"}
+#        else:
+#            return False, f"API 오류: {response.status_code}, {response.text}"
+#    
+#    except Exception as e:
+#        return False, f"요청 오류: {str(e)}"
+
+import logging
+
+# 로깅 설정
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+def send_data_to_api(data):
+    """데이터를 API로 전송합니다."""
+    try:
+        headers = {'Content-Type': 'application/json', 'x-api-key':'8jFsXcDsgW6XEG13oAUZbaoHsujHjDhL38LmrNJu'}
+        logger.debug(f"API 연결 시도: {API_ENDPOINT}")
+        response = requests.post(API_ENDPOINT, json=data, headers=headers, timeout=30)
+        logger.debug(f"API 응답 상태 코드: {response.status_code}")
+        logger.debug(f"API 응답 내용: {response.text}")
+        
+        if response.status_code == 200:
+            return True, response.json() if response.text else {"message": "Success"}
+        else:
+            return False, f"API 오류: {response.status_code}, {response.text}"
+    except requests.exceptions.Timeout:
+        logger.error("API 요청 타임아웃")
+        return False, "API 요청 타임아웃"
+    except requests.exceptions.ConnectionError:
+        logger.error("API 연결 오류")
+        return False, "API 연결 오류"
+    except Exception as e:
+        logger.error(f"예외 발생: {str(e)}")
+        logger.error(traceback.format_exc())
+        return False, f"예외 발생: {str(e)}"
+
 def generate_heart_rate_data(user_data, duration_days=7, interval_seconds=30, output_dir='heart_rate_data',
-                            risk_percentage=0.15, output_format=None):
+                            risk_percentage=0.15, output_format=None, send_to_api=False):
     """
     모든 사용자의 심박수 데이터를 생성하고 저장합니다.
-    메모리 효율적: 데이터를 메모리에 누적하지 않고 바로 파일에 기록합니다.
-
-    Parameters:
-    -----------
-    user_data : DataFrame
-        사용자 정보가 포함된 DataFrame
-    duration_days : int
-        생성할 과거 데이터 기간 (일)
-    interval_seconds : int
-        데이터 기록 간격 (초)
-    output_dir : str
-        출력 디렉토리 경로
-    risk_percentage : float
-        70세 이상 사용자 중 위험 상황을 포함할 비율 (0-1)
-    output_format : str or list, optional
-        출력 파일 형식 ('csv', 'json', 또는 ['csv', 'json'])
-        None인 경우 모든 형식으로 저장
     """
     # 출력 디렉토리 생성
     os.makedirs(output_dir, exist_ok=True)
@@ -243,6 +273,8 @@ def generate_heart_rate_data(user_data, duration_days=7, interval_seconds=30, ou
     risk_event_count = 0
     risk_events_summary = []
     first_json_record = True  # 첫 번째 JSON 레코드인지 확인 (쉼표 처리용)
+    api_success_count = 0
+    api_failure_count = 0
 
     try:
         # 각 사용자에 대한 심박수 데이터 생성
@@ -260,11 +292,11 @@ def generate_heart_rate_data(user_data, duration_days=7, interval_seconds=30, ou
 
             # 생성된 데이터를 바로 파일에 쓰기
             for entry in heart_rates:
-                entry['user_id'] = user_id  # 사용자 ID 추가
+                entry['user_id'] = str(user_id)  # user_id를 문자열로 변환
 
                 # CSV에 기록
                 if 'csv' in file_handles:
-                    file_handles['csv'].write(f"{entry['user_id']},{entry['timestamp']},{entry['heartbeat_max']},{entry['heartbeat_min']},{entry['heartbeat_avg']},{entry['is_risk']}\n")
+                    file_handles['csv'].write(f"{entry['user_id']},{entry['timestamp']},{entry['heartbeat_max']},{entry['heartbeat_min']},{entry['heartbeat_avg']},{1 if entry['is_risk'] else 0}\n")
 
                 # JSON에 기록
                 if 'json' in file_handles:
@@ -273,11 +305,22 @@ def generate_heart_rate_data(user_data, duration_days=7, interval_seconds=30, ou
                     else:
                         first_json_record = False
 
-                    json_line = json.dumps(entry, ensure_ascii=False)
+                    # is_risk를 1/0에서 boolean으로 변환
+                    json_entry = entry.copy()
+                    json_line = json.dumps(json_entry, ensure_ascii=False)
                     file_handles['json'].write(json_line)
 
+                # API로 데이터 전송
+                if send_to_api:
+                    success, response = send_data_to_api(entry)
+                    if success:
+                        api_success_count += 1
+                    else:
+                        api_failure_count += 1
+                        print(f"API 전송 실패: {response}")
+
                 # 위험 이벤트 요약 정보 수집
-                if entry['is_risk'] == 1:
+                if entry['is_risk']:
                     risk_event_count += 1
                     # 최대 10개까지만 요약 정보 저장
                     if len(risk_events_summary) < 10:
@@ -302,13 +345,15 @@ def generate_heart_rate_data(user_data, duration_days=7, interval_seconds=30, ou
             print(f"  사용자 {event['user_id']} - {event['timestamp']} - 심박수: {event['heartbeat_avg']} bpm")
         if risk_event_count > 10:
             print(f"  ... 외 {risk_event_count-10}건")
+    
+    if send_to_api:
+        print(f"API 전송 결과: 성공 {api_success_count}건, 실패 {api_failure_count}건")
 
     print(f"완료! 모든 사용자의 심박수 데이터가 {output_dir} 디렉토리에 저장되었습니다.")
 
-def generate_realtime_data(user_data, interval_seconds=30, output_dir='realtime_heart_data', risk_percentage=0.15):
+def generate_realtime_data(user_data, interval_seconds=30, output_dir='realtime_heart_data', risk_percentage=0.15, send_to_api=True):
     """
-    실시간으로 심박수 데이터를 생성합니다.
-    한 개의 파일에 계속 데이터를 추가합니다.
+    실시간으로 심박수 데이터를 생성하고 API로 전송합니다.
     """
     os.makedirs(output_dir, exist_ok=True)
     
@@ -352,7 +397,7 @@ def generate_realtime_data(user_data, interval_seconds=30, output_dir='realtime_
             json.dump([], f)
     
     try:
-        print("실시간 심박수 데이터 생성을 시작합니다. 중단하려면 Ctrl+C를 누르세요.")
+        print("실시간 심박수 데이터 생성 및 API 전송을 시작합니다. 중단하려면 Ctrl+C를 누르세요.")
         
         # 각 사용자의 최근 심박수 값을 저장할 사전
         user_heart_rates = {}
@@ -360,31 +405,35 @@ def generate_realtime_data(user_data, interval_seconds=30, output_dir='realtime_
         # 위험 상황 진행 상태 추적
         risk_progress = {user_id: 0.0 for user_id in risk_users}
         
+        # API 전송 통계
+        api_success_count = 0
+        api_failure_count = 0
+        
         while True:
             current_time = datetime.now()
-            timestamp = current_time.strftime('%Y-%m-%d %H:%M:%S')
+            timestamp = current_time.strftime('%Y-%m-%dT%H:%M:%S')  # ISO 형식으로 수정
             timestamp_log = current_time.strftime("%H-%M-%S")  # hh-mm-ss 형식의 타임스탬프
             
             all_records = []
             risk_detected = False
             
             for idx, user in user_data.iterrows():
-                user_id = user['user_id']
+                user_id = str(user['user_id'])  # user_id를 문자열로 변환
                 age = user['age']
                 
                 # 위험 상황 체크
                 is_risk_period = False
                 risk_progress_value = 0.0
                 
-                if user_id in risk_times:
-                    risk_start, risk_end = risk_times[user_id]
+                if int(user_id) in risk_times:
+                    risk_start, risk_end = risk_times[int(user_id)]
                     if risk_start <= current_time <= risk_end:
                         is_risk_period = True
                         # 위험 진행 정도 계산 (0.0-1.0)
                         total_seconds = (risk_end - risk_start).total_seconds()
                         elapsed_seconds = (current_time - risk_start).total_seconds()
                         risk_progress_value = min(1.0, elapsed_seconds / total_seconds)
-                        risk_progress[user_id] = risk_progress_value
+                        risk_progress[int(user_id)] = risk_progress_value
                         risk_detected = True
                 
                 # 심박수 계산
@@ -442,15 +491,24 @@ def generate_realtime_data(user_data, interval_seconds=30, output_dir='realtime_
                     'heartbeat_max': heart_rate_max,
                     'heartbeat_min': heart_rate_min,
                     'heartbeat_avg': heart_rate,
-                    'is_risk': 1 if is_risk_period else 0
+                    'is_risk': is_risk_period  # Boolean으로 저장
                 }
                 
                 all_records.append(record)
+                
+                # API로 데이터 전송
+                if send_to_api:
+                    success, response = send_data_to_api(record)
+                    if success:
+                        api_success_count += 1
+                    else:
+                        api_failure_count += 1
+                        print(f"API 전송 실패: {response}")
             
             # CSV에 데이터 추가 (한 줄씩 추가)
             with open(file_csv, 'a', encoding='utf-8') as f:
                 for record in all_records:
-                    f.write(f"{record['user_id']},{record['timestamp']},{record['heartbeat_max']},{record['heartbeat_min']},{record['heartbeat_avg']},{record['is_risk']}\n")
+                    f.write(f"{record['user_id']},{record['timestamp']},{record['heartbeat_max']},{record['heartbeat_min']},{record['heartbeat_avg']},{1 if record['is_risk'] else 0}\n")
             
             # JSON 파일 업데이트 (기존 데이터 읽어서 추가)
             with open(file_json, 'r', encoding='utf-8') as f:
@@ -463,13 +521,13 @@ def generate_realtime_data(user_data, interval_seconds=30, output_dir='realtime_
 
             # 위험 상황 알림
             if risk_detected:
-                current_risks = [r for r in all_records if r['is_risk'] == 1]
+                current_risks = [r for r in all_records if r['is_risk']]
                 for risk in current_risks:
                     user_id = risk['user_id']
                     heart_rate = risk['heartbeat_avg']
                     print(f"⚠️ {timestamp_log} 위험 감지! 사용자 {user_id} - 심박수: {heart_rate} bpm")
             
-            print(f"{timestamp_log} - {len(all_records)}명의 사용자 데이터가 기록됨")
+            print(f"{timestamp_log} - {len(all_records)}명의 사용자 데이터가 기록됨, API 전송: 성공 {api_success_count}건, 실패 {api_failure_count}건")
             
             # 지정된 간격만큼 대기
             time.sleep(interval_seconds)
@@ -477,17 +535,21 @@ def generate_realtime_data(user_data, interval_seconds=30, output_dir='realtime_
     except KeyboardInterrupt:
         print("\n실시간 데이터 생성을 중단합니다.")
         print(f"생성된 데이터는 {file_csv} 및 {file_json} 파일에 있습니다.")
+        print(f"API 전송 통계: 성공 {api_success_count}건, 실패 {api_failure_count}건")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='사용자별 심박수 데이터 생성기')
+    parser = argparse.ArgumentParser(description='사용자별 심박수 데이터 생성기 및 API 전송')
     parser.add_argument('--input', type=str, required=True, help='입력 사용자 데이터 파일 경로 (CSV 또는 JSON)')
-    parser.add_argument('--interval', type=int, default=30, help='데이터 기록 간격 (초)')
+    parser.add_argument('--interval', type=int, default=30, help='데이터 기록 및 전송 간격 (초)')
     parser.add_argument('--days', type=int, default=1, help='생성할 과거 데이터 기간 (일)')
     parser.add_argument('--realtime', action='store_true', help='실시간 데이터 생성 모드')
     parser.add_argument('--risk', type=float, default=0.15, help='위험 상황을 포함할 70세 이상 사용자의 비율 (0-1)')
     parser.add_argument('--output', type=str, default='heart_rate_data', help='출력 디렉토리 경로')
     parser.add_argument('--format', type=str, choices=['csv', 'json', 'both'], default='both',
                         help='출력 파일 형식: csv, json, both (기본값: both)')
+    parser.add_argument('--api', action='store_true', help='API로 데이터 전송 활성화')
+    parser.add_argument('--no-api', dest='api', action='store_false', help='API로 데이터 전송 비활성화')
+    parser.set_defaults(api=True)  # 기본값: API 전송 활성화
 
     args = parser.parse_args()
 
