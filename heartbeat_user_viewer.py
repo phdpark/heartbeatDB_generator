@@ -13,6 +13,8 @@ from decimal import Decimal
 import time
 from zoneinfo import ZoneInfo
 
+from qa_module import render_qa_section
+
 kst = ZoneInfo("Asia/Seoul")
 
 # 페이지 제목 설정
@@ -634,34 +636,16 @@ except Exception as e:
     st.info("에러가 발생했습니다. CSV 파일의 형식을 확인해주세요.")
 
 # 푸터 정보
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 사용자 데이터 뷰어")
-st.sidebar.markdown("한국 사용자 정보와 심박수 데이터를 관리하는 도구입니다.")
+#st.sidebar.markdown("---")
+#st.sidebar.markdown("### 사용자 데이터 뷰어")
+#st.sidebar.markdown("한국 사용자 정보와 심박수 데이터를 관리하는 도구입니다.")
 
-# 데이터 예시 다운로드
-if st.sidebar.button("샘플 데이터 다운로드"):
-    sample_data = {
-        'user_id': [1001, 1002, 1003, 1004, 1005],
-        'name_kr': ['홍길동', '김철수', '이영희', '박민수', '정지영'],
-        'name_en': ['Hong Gildong', 'Kim Chulsoo', 'Lee Younghee', 'Park Minsoo', 'Jung Jiyoung'],
-        'age': [28, 35, 42, 25, 31],
-        'gender_kr': ['남성', '남성', '여성', '남성', '여성'],
-        'gender_en': ['Male', 'Male', 'Female', 'Male', 'Female'],
-        'region_kr': ['서울', '부산', '대구', '인천', '광주'],
-        'region_en': ['Seoul', 'Busan', 'Daegu', 'Incheon', 'Gwangju'],
-        'latitude': [37.5665, 35.1796, 35.8714, 37.4563, 35.1595],
-        'longitude': [126.9780, 129.0756, 128.6014, 126.7052, 126.8526],
-        'phone_number': ['010-1234-5678', '010-2345-6789', '010-3456-7890', 
-                        '010-4567-8901', '010-5678-9012']
-    }
-    sample_df = pd.DataFrame(sample_data)
-    
-    # CSV 파일로 변환
-    csv = sample_df.to_csv(index=False)
-    
-    st.sidebar.download_button(
-        label="CSV 다운로드",
-        data=csv,
-        file_name="sample_user_data.csv",
-        mime="text/csv"
-    )
+#render_qa_section()
+html_code = """
+<iframe src="https://bivxdf3zxd.execute-api.us-east-1.amazonaws.com/prod/"
+        width="400"
+        height="600"
+        style="border: none;">
+</iframe>
+"""
+st.sidebar.markdown(html_code, unsafe_allow_html=True)
