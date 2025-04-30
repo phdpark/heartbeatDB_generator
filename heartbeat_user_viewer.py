@@ -26,16 +26,19 @@ language = st.sidebar.radio("언어 선택:", ["한국어", "English"])
 default_file_path = "korean_test_data_1000.csv"
 
 # 파일 업로드 옵션 (선택적)
-st.sidebar.markdown("### 다른 CSV 파일 업로드 (선택사항)")
-uploaded_file = st.sidebar.file_uploader("다른 CSV 파일 업로드", type="csv")
+#st.sidebar.markdown("### 다른 CSV 파일 업로드 (선택사항)")
+#uploaded_file = st.sidebar.file_uploader("다른 CSV 파일 업로드", type="csv")
 
 # 데이터 로드
 try:
+    '''
     if uploaded_file is not None:
         # 사용자가 업로드한 파일 사용
         df = pd.read_csv(uploaded_file)
         st.success("업로드한 파일이 성공적으로 로드되었습니다!")
     elif os.path.exists(default_file_path):
+    '''
+    if os.path.exists(default_file_path):
         # 기본 파일 사용
         df = pd.read_csv(default_file_path)
         st.info(f"기본 데이터셋 '{default_file_path}'이(가) 로드되었습니다.")
@@ -636,17 +639,6 @@ except Exception as e:
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 사용자 데이터 뷰어")
 st.sidebar.markdown("한국 사용자 정보와 심박수 데이터를 관리하는 도구입니다.")
-
-# 앱 실행 방법 안내
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 앱 실행 방법")
-st.sidebar.code("""
-# 필요한 라이브러리 설치
-pip install streamlit pandas folium streamlit-folium plotly
-
-# 앱 실행
-streamlit run app.py
-""")
 
 # 데이터 예시 다운로드
 if st.sidebar.button("샘플 데이터 다운로드"):
