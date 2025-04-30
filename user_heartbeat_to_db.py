@@ -8,8 +8,11 @@ import os
 import random
 import boto3
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import logging
 import traceback
+
+kst = ZoneInfo("Asia/Seoul")
 
 # 로깅 설정
 #logging.basicConfig(level=logging.DEBUG)
@@ -18,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # DynamoDB 클라이언트 설정
 dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-table_name = 'heatbeat-record-table' # 사용할 DynamoDB 테이블 이름
+table_name = 'heatbeat-dynamodb-table' # 사용할 DynamoDB 테이블 이름
 table = dynamodb.Table(table_name)
 
 def load_user_data(file_path):
@@ -48,7 +51,7 @@ def generate_heart_rates(user_id, age, duration_days=7, interval_seconds=30, is_
     - is_high_risk가 True인 경우, 위험 이벤트 발생 가능 (70세 이상)
     """
     # 현재 시간에서 주일 전으로 시작 시간 설정
-    end_time = datetime.now()
+    end_time = datetime.now(tz=kst)
     start_time = end_time - timedelta(days=duration_days)
     
     # 기간 동안의 모든 타임스탬프 생성 (30초 간격)
@@ -282,7 +285,7 @@ def generate_realtime_data(user_data, interval_seconds=30, risk_percentage=0.15)
     for user_id in risk_users:
         # 5-30분 후에 위험 상황 발생
         minutes_from_now = random.randint(5, 30)
-        risk_start = datetime.now() + timedelta(minutes=minutes_from_now)
+        risk_start = datetime.now(tz=kst) + timedelta(minutes=minutes_from_now)
         # 위험 지속 시간 2-10분
         risk_duration = random.randint(2, 10)
         risk_end = risk_start + timedelta(minutes=risk_duration)
@@ -304,7 +307,7 @@ def generate_realtime_data(user_data, interval_seconds=30, risk_percentage=0.15)
         db_failure_count = 0
         
         while True:
-            current_time = datetime.now()
+            current_time = datetime.now(tz=kst)
             timestamp = current_time.strftime('%Y-%m-%dT%H:%M:%S')  # ISO 형식으로 수정
             timestamp_log = current_time.strftime("%H:%M:%S")  # hh:mm:ss 형식의 타임스탬프
             
@@ -421,7 +424,7 @@ if __name__ == "__main__":
     parser.add_argument('--days', type=int, default=1, help='생성할 과거 데이터 기간 (일)')
     parser.add_argument('--realtime', action='store_true', help='실시간 데이터 생성 모드')
     parser.add_argument('--risk', type=float, default=0.15, help='위험 상황을 포함할 70세 이상 사용자의 비율 (0-1)')
-    parser.add_argument('--table', type=str, default='heatbeat-record-table', help='DynamoDB 테이블 이름')
+    parser.add_argument('--table', type=str, default='heatbeat-dynamodb-table', help='DynamoDB 테이블 이름')
 
     args = parser.parse_args()
 
