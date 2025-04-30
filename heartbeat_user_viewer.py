@@ -31,13 +31,11 @@ default_file_path = "korean_test_data_1000.csv"
 
 # 데이터 로드
 try:
-    '''
-    if uploaded_file is not None:
-        # 사용자가 업로드한 파일 사용
-        df = pd.read_csv(uploaded_file)
-        st.success("업로드한 파일이 성공적으로 로드되었습니다!")
-    elif os.path.exists(default_file_path):
-    '''
+#    if uploaded_file is not None:
+#        # 사용자가 업로드한 파일 사용
+#        df = pd.read_csv(uploaded_file)
+#        st.success("업로드한 파일이 성공적으로 로드되었습니다!")
+#    elif os.path.exists(default_file_path):
     if os.path.exists(default_file_path):
         # 기본 파일 사용
         df = pd.read_csv(default_file_path)
